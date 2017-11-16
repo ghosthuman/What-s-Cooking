@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 
 
-
 def drop_na(df):
     return df.dropna()
 
@@ -44,6 +43,8 @@ def make_df(file_path):
     df_pd = df_pd.drop('cuisine', axis=1)
     df_pd['labels'] = one_hot
 
+    print len(df_pd['labels'][0])
+
     # Calculate ones
     # summms = df_pd.sum(axis=1) + 6715
     # print summms.sum(axis=0)
@@ -51,21 +52,20 @@ def make_df(file_path):
     # df_pd.to_csv('feature_sheet.csv')
     print 'Feature sheet generated'
 
-    print df_pd.shape
     rows = df_pd.shape[0]
 
     train_df = df_pd.iloc[:int(0.8*rows), :]
     test_df = df_pd.iloc[int(0.8*rows):]
 
-    print train_df.shape
-    print test_df.shape
+    # print train_df.shape
+    # print test_df.shape
+    # print train_df.head()
+    train_features = list(np.array(train_df.iloc[:, :-1]))
+    train_labels = list(np.array(train_df.iloc[:, -1]))
+    test_features = list(np.array(test_df.iloc[:, :-1]))
+    test_labels = list(np.array(test_df.iloc[:, -1]))
 
-    train_features = list(train_df.iloc[:, :-1])
-    train_labels = list(train_df.iloc[:, -1])
-    test_features = list(test_df.iloc[:, :-1])
-    test_labels = list(test_df.iloc[:, -1])
+    return train_features, train_labels, test_features, test_labels
 
-    return train_features,train_labels,test_features,test_labels
-
-
-
+if __name__ == "__main__":
+    tr_f, tr_l, ts_f, ts_l = make_df('train.json')
