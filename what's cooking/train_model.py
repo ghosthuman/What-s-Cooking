@@ -54,13 +54,13 @@ class Train_Model(object):
         self.hidden_layer1['bias'] = tf.Variable(tf.zeros([self.hidden_layer1['nodes']]))
         prev_nodes = self.hidden_layer1['nodes']
 
-        self.hidden_layer2['nodes'] = 60
+        self.hidden_layer2['nodes'] = 80
         self.hidden_layer2['weights'] = tf.Variable(
             tf.truncated_normal([prev_nodes, self.hidden_layer2['nodes']], stddev=0.1))
         self.hidden_layer2['bias'] = tf.Variable(tf.zeros([self.hidden_layer2['nodes']]))
         prev_nodes = self.hidden_layer2['nodes']
 
-        self.hidden_layer3['nodes'] = 50
+        self.hidden_layer3['nodes'] = 60
         self.hidden_layer3['weights'] = tf.Variable(
             tf.truncated_normal([prev_nodes, self.hidden_layer3['nodes']], stddev=0.1))
         self.hidden_layer3['bias'] = tf.Variable(tf.zeros([self.hidden_layer3['nodes']]))
@@ -84,7 +84,7 @@ class Train_Model(object):
         layer1 = tf.add(tf.matmul(data, self.hidden_layer1['weights']), self.hidden_layer1['bias'])
         # layer1 = tf.nn.tanh(layer1)
         layer1 = tf.nn.relu(layer1)
-        layer1 = tf.nn.dropout(layer1, self.pkeep)
+        layer1 = tf.nn.dropout(layer1, self.pkeep - 0.20)
         prev_layer = layer1
 
         layer2 = tf.add(tf.matmul(prev_layer, self.hidden_layer2['weights']), self.hidden_layer2['bias'])
@@ -102,7 +102,7 @@ class Train_Model(object):
         layer4 = tf.add(tf.matmul(prev_layer, self.hidden_layer4['weights']), self.hidden_layer4['bias'])
         # layer4 = tf.nn.tanh(layer3)
         layer4 = tf.nn.relu(layer4)
-        layer4 = tf.nn.dropout(layer4, self.pkeep)
+        # layer4 = tf.nn.dropout(layer4, self.pkeep)
         prev_layer = layer4
 
         output = tf.add(tf.matmul(prev_layer, self.output_layer['weights']), self.output_layer['bias'])
@@ -113,17 +113,26 @@ class Train_Model(object):
 
         # learning_rate = 0.0001
         beta = 0.01
+        n_epochs = 500
+        batch_size = 512
+        lambd = 1.0/batch_size
+        threshold = 0.78
+
         prediction = self.graph_gen(self.x)
         softmax_prediction = tf.nn.softmax(prediction)
 
         cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=prediction, labels=self.y))
+
+        cost += lambd * tf.nn.l2_loss(self.hidden_layer1['weights']) + \
+            lambd * tf.nn.l2_loss(self.hidden_layer2['weights']) + \
+            lambd * tf.nn.l2_loss(self.hidden_layer3['weights']) + \
+            lambd * tf.nn.l2_loss(self.hidden_layer4['weights']) + \
+            lambd * tf.nn.l2_loss(self.output_layer['weights'])
+
         optimizer = tf.train.AdamOptimizer(learning_rate=self.lr).minimize(cost)
 
         correct = tf.equal(tf.argmax(softmax_prediction, 1), tf.argmax(self.y, 1))
         accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
-
-        n_epochs = 200
-        batch_size = 100
 
         train_acc_to_plot = []
         test_acc_to_plot = []
@@ -140,11 +149,12 @@ class Train_Model(object):
             max_test_acc = 0.0
 
             for epoch in range(n_epochs):
+                start_time = time.time()
                 epoch_loss = 0
                 i = 0
 
                 # learning rate decay
-                max_learning_rate = 0.01
+                max_learning_rate = 0.001
                 min_learning_rate = 0.0001
                 decay_speed = 2000.0
                 learning_rate = min_learning_rate + (max_learning_rate - min_learning_rate) \
@@ -156,7 +166,7 @@ class Train_Model(object):
                     batch_y = np.array(self.train_labels[start:end])
 
                     temp, c = sess.run([optimizer, cost], feed_dict={self.x: batch_x, self.y: batch_y,
-                                                                     self.lr: learning_rate, self.pkeep: 0.85})
+                                                                     self.lr: learning_rate, self.pkeep: 0.75})
 
                     epoch_loss += c
                     i += batch_size
@@ -176,7 +186,15 @@ class Train_Model(object):
                     test_acc_to_plot.append(test_accuracy)
 
                     print 'epoch:', epoch, '\ttrain_accuracy:', train_accuracy, '\ttest_accuracy:', test_accuracy, \
-                                        '\tloss:', epoch_loss, '\tmaximum test accuracy:', max_test_acc
+                        '\tloss:', epoch_loss, '\tmaximum test accuracy:', max_test_acc, \
+                        '\ttime_taken:', time.time() - start_time
+
+                    if test_accuracy > threshold:
+                        file_path = "./saved_models/model_v_" + str(threshold) + ".ckpt"
+                        save_path = saver.save(sess, file_path)
+                        print "BEST MODEL EVER!!!!!!"
+                        print("Model saved in file: %s" % save_path)
+                        threshold += 0.1
                 else:
                     print 'epoch:', epoch, '\ttrain_accuracy:', train_accuracy, \
                         '\tloss:', epoch_loss, '\tlearning_rate:', learning_rate
@@ -189,26 +207,25 @@ class Train_Model(object):
             #
             # plt.ioff()
             # plt.show()
-                if test_accuracy > 0.78:
-                    break
+
 
             save_path = saver.save(sess, "./saved_models/model_v1.ckpt")
             print("Model saved in file: %s" % save_path)
 
         ax1 = fig.add_subplot(221)
         ax1.plot(range(n_epochs), train_acc_to_plot, label='train', c='b')
-        ax1.set_ylim([0.97, 1.0])
+        ax1.set_ylim([0.0, 1.0])
         ax1.legend()
 
         if self.train_test_split:
             ax2 = fig.add_subplot(222)
             ax2.plot(range(n_epochs), test_acc_to_plot, label='test', c='y')
-            ax2.set_ylim([0.75, 0.79])
+            ax2.set_ylim([0.0, 1.0])
             ax2.legend()
 
         ax3 = fig.add_subplot(223)
         ax3.plot(range(n_epochs), cost_to_plot, label='cost', c='r')
-        ax3.set_ylim([0, 100])
+        ax3.set_ylim([0, 300])
         ax3.legend()
 
         plt.show()
@@ -223,7 +240,8 @@ class Train_Model(object):
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            saver.restore(sess, "./saved_models/model_v1.ckpt")
+            file_path = "./saved_models/model_v_0.78.ckpt"
+            saver.restore(sess, file_path)
             output_file = './outputs/output' + str(datetime.datetime.now()) + '.csv'
             result = sess.run(tf.argmax(prediction.eval(feed_dict={self.x: self.train_features,
                                                                    self.pkeep: 1}), 1))
